@@ -368,35 +368,6 @@ diagnosis = agent.diagnose_anomaly(
 
 
 
-## 🔧 配置说明
-
-所有配置在 `config.py` 中集中管理：
-
-### 模型配置
-```python
-class ModelConfig:
-    HIDDEN_DIM = 64       # LSTM隐藏层维度
-    NUM_LAYERS = 2        # LSTM层数
-    BATCH_SIZE = 128      # 批次大小
-    MAX_EPOCHS = 30       # 最大训练轮数
-    LEARNING_RATE = 0.001 # 学习率
-```
-
-### LLM配置
-```python
-class LLMConfig:
-    MODEL_NAME = "llama3"      # Ollama模型
-    TEMPERATURE = 0.7          # 生成温度
-    USE_COT = True             # 使用思维链推理
-```
-
-### RAG配置
-```python
-class RAGConfig:
-    TOP_K = 5                  # 检索Top-K文档
-    EMBEDDING_MODEL = "BAAI/bge-small-zh-v1.5"
-```
-
 
 ## 🤝 贡献指南
 
