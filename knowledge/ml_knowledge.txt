@@ -1,0 +1,5 @@
+ARIMA is suitable for linear and stationary time series forecasting problems.
+LSTM is effective for nonlinear sequential data with long-term dependencies.
+XGBoost performs well on structured tabular regression and classification tasks.
+Linear regression is a baseline model for regression problems.
+Random Forest is robust for general-purpose classification and regression tasks.
