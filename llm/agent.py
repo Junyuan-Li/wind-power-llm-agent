@@ -17,7 +17,7 @@ def _build_llm_client(llm_backend: str, adapter_path: str = None):
     工厂函数：根据 backend 名称返回对应客户端
 
     参数:
-        llm_backend : "ollama"（默认）或 "lora"
+        llm_backend : "ollama"（默认）, "lora", 或 "vllm"
         adapter_path: LoRA adapter 目录，仅 backend="lora" 时使用
     """
     if llm_backend == "lora":
@@ -29,6 +29,10 @@ def _build_llm_client(llm_backend: str, adapter_path: str = None):
             return OllamaClient()
         print(f"✅ 使用 LoRA adapter: {client.adapter_path}")
         return client
+    elif llm_backend == "vllm":
+        from llm.vllm_client import VLLMClient
+        print(f"✅ 使用 vLLM 服务")
+        return VLLMClient()
     else:
         return OllamaClient()
 

@@ -258,7 +258,7 @@ class LSTMTrainer:
     def load_best_model(self):
         """加载最佳模型（包含归一化参数）"""
         if self.model is not None and ModelConfig.MODEL_SAVE_PATH.exists():
-            checkpoint = torch.load(ModelConfig.MODEL_SAVE_PATH, map_location=self.device)
+            checkpoint = torch.load(ModelConfig.MODEL_SAVE_PATH, map_location=self.device, weights_only=False)
             
             # 检查checkpoint格式
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:

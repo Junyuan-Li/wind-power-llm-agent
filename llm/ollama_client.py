@@ -27,20 +27,17 @@ class OllamaClient:
                  max_tokens=None, stream=False):
         """
         生成文本
-        
-        参数:
-            prompt: 用户输入
-            system_prompt: 系统提示
-            temperature: 温度参数
-            max_tokens: 最大token数
-            stream: 是否流式输出
-            
-        返回:
-            生成的文本
         """
-        temperature = temperature or LLMConfig.TEMPERATURE
-        max_tokens = max_tokens or LLMConfig.MAX_TOKENS
-        system_prompt = system_prompt or LLMConfig.SYSTEM_PROMPT
+        try:
+            temperature = temperature if temperature is not None else LLMConfig.TEMPERATURE
+            max_tokens = max_tokens if max_tokens is not None else LLMConfig.MAX_TOKENS
+            system_prompt = system_prompt if system_prompt is not None else LLMConfig.SYSTEM_PROMPT
+            timeout_val = LLMConfig.TIMEOUT
+        except:
+            temperature = 0.7
+            max_tokens = 512
+            system_prompt = "You are a helpful assistant."
+            timeout_val = 60
         
         # 构建完整prompt
         if system_prompt:
@@ -53,36 +50,53 @@ class OllamaClient:
             "prompt": full_prompt,
             "temperature": temperature,
             "num_predict": max_tokens,
-            "stream": stream
+            "stream": True
         }
-        
-        # 使用流式模式：边生成边读取，不受单次响应超时限制
-        payload["stream"] = True
 
         try:
             response = requests.post(
                 self.api_url,
                 json=payload,
-                timeout=(10, LLMConfig.TIMEOUT),  # (连接超时, 读取超时)
+                timeout=(10, timeout_val),
                 stream=True
             )
             response.raise_for_status()
 
             full_response = ""
-            for line in response.iter_lines():
-                if line:
-                    chunk = json.loads(line)
-                    if 'response' in chunk:
-                        full_response += chunk['response']
-                    if chunk.get('done', False):
-                        break
+            chunk_count = 0
+            
+            for content_chunk in response.iter_content(chunk_size=1024):
+                if not content_chunk:
+                    continue
+                
+                # 将bytes转换为str
+                if isinstance(content_chunk, bytes):
+                    content_chunk = content_chunk.decode('utf-8', errors='ignore')
+                
+                # 可能有多行数据
+                for line in content_chunk.split('\n'):
+                    if not line.strip():
+                        continue
+                    
+                    try:
+                        chunk = json.loads(line)
+                        if 'response' in chunk:
+                            full_response += chunk['response']
+                            chunk_count += 1
+                        if chunk.get('done', False):
+                            break
+                    except json.JSONDecodeError:
+                        continue
+                
+                if chunk_count > 0 and chunk.get('done', False):
+                    break
+            
+            if not full_response:
+                return None
+            
             return full_response
 
-        except requests.exceptions.ReadTimeout:
-            print(f"⏰ Ollama响应超时（>{LLMConfig.TIMEOUT}s），返回fallback")
-            return None
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Ollama API调用失败: {e}")
+        except:
             return None
     
     def chat(self, messages, temperature=None, max_tokens=None):

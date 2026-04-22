@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
 from config import ModelConfig, UIConfig, PROJECT_ROOT
-from models import LSTMWindPowerPredictor
+from models import LSTMWindPowerPredictor, predict_with_lstm
 from llm import WindPowerAgent
 
 
@@ -41,7 +41,7 @@ def load_model():
         dropout=ModelConfig.DROPOUT
     )
     
-    checkpoint = torch.load(model_path, map_location='cpu', weights_only=True)
+    checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
@@ -116,6 +116,9 @@ def show_prediction_mode(model, agent, model_loaded, agent_loaded):
     
     st.header("📊 风电功率预测与智能解释")
     
+    # 初始化预测结果
+    predicted_power = None
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -163,19 +166,28 @@ def show_prediction_mode(model, agent, model_loaded, agent_loaded):
             if not model_loaded:
                 st.error("❌ 模型未加载，无法预测")
             else:
-                with st.spinner("⚡ 预测中..."):
-                    # 这里简化处理，实际需要完整的序列数据
-                    # 仅作展示
+                with st.spinner("⚡ 使用LSTM模型预测中..."):
+                    # 使用已训练的LSTM模型进行预测
+                    import torch
+                    device = 'cuda' if torch.cuda.is_available() else 'cpu'
                     
-                    # 使用物理公式估算（作为demo）
-                    estimated_power = 0.5 * density * np.pi * (40**2) * (wind_speed ** 3) / 1000
-                    estimated_power = min(max(estimated_power, 0), 5000)  # 限制在0-5000kW
-                    
-                    st.metric(
-                        label="⚡ 预测功率",
-                        value=f"{estimated_power:.2f} kW",
-                        delta=f"基于风速 {wind_speed} m/s"
+                    predicted_power = predict_with_lstm(
+                        model,
+                        wind_speed=wind_speed,
+                        temperature=temperature,
+                        pressure=pressure,
+                        density=density,
+                        device=device
                     )
+                    
+                    if predicted_power is not None:
+                        st.metric(
+                            label="⚡ LSTM预测功率",
+                            value=f"{predicted_power:.2f} kW",
+                            delta=f"基于LSTM模型 - 风速 {wind_speed} m/s"
+                        )
+                    else:
+                        st.error("❌ LSTM预测失败，请检查模型")
                     
                     # 显示输入摘要
                     with st.expander("📋 输入数据摘要"):
@@ -194,7 +206,7 @@ def show_prediction_mode(model, agent, model_loaded, agent_loaded):
     st.markdown("---")
     st.subheader("🧠 智能解释")
     
-    if predict_button and model_loaded:
+    if predict_button and model_loaded and predicted_power is not None:
         if not agent_loaded:
             st.warning("⚠️ LLM Agent未就绪，无法生成解释")
         else:
@@ -204,7 +216,7 @@ def show_prediction_mode(model, agent, model_loaded, agent_loaded):
                     'temperature': temperature,
                     'pressure': pressure,
                     'density': density,
-                    'predicted_power': estimated_power
+                    'predicted_power': predicted_power
                 }
                 
                 try:

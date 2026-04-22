@@ -1,3 +1,17 @@
+# Test files
+test_*.py
+check_*.py
+quick_*.py
+
+# Demo files  
+demo_*.py
+run_demo.py
+run_vllm_agent.py
+
+# Fix/utility scripts
+fix_*.py
+update_model_checkpoint.py
+
 # Python environments
 venv/
 env/
@@ -14,8 +28,9 @@ data/
 *.csv
 *.xlsx
 
-# Model Checkpoints & Adapters
+# Model Checkpoints & Adapters (except best_lstm_model.pth)
 *.pth
+!best_lstm_model.pth
 *.pt
 *.ckpt
 *.bin
@@ -32,3 +47,9 @@ wind_power_adapter/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Outputs
+prediction_results.json
+*.log
+temp/
+tmp/

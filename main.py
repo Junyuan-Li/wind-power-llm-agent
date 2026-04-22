@@ -139,7 +139,7 @@ class WindPowerSystem:
         )
         
         # 兼容新版的 state_dict 存储格式
-        checkpoint = torch.load(model_path, map_location=self.device)
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             self.model.load_state_dict(checkpoint["model_state_dict"])
             # 如果 checkpoint 里有归一化参数就用，否则从数据文件重新计算（兼容旧版保存格式）

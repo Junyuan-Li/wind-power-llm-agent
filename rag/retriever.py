@@ -118,16 +118,28 @@ class Layer2_HistoricalWeatherRAG:
         # 构建返回结果
         results = []
         for idx in top_indices:
+            dist = float(distances[idx])
+            # 改进相似度计算：使用更合理的公式
+            # 当距离<5时，相似度>0.5；距离=10时，相似度≈0.09
+            similarity = np.exp(-dist / 5.0)  # 指数衰减，更平滑
+            
             similar_case = {
                 'wind_speed': self.data.loc[idx, 'wind_speed'] if 'wind_speed' in self.data.columns else None,
                 'temperature': self.data.loc[idx, 'temperature'] if 'temperature' in self.data.columns else None,
                 'pressure': self.data.loc[idx, 'pressure'] if 'pressure' in self.data.columns else None,
                 'density': self.data.loc[idx, 'density'] if 'density' in self.data.columns else None,
                 'wind_power': self.data.loc[idx, 'wind_power'] if 'wind_power' in self.data.columns else None,
-                'similarity': 1 / (1 + distances[idx]),
-                'distance': float(distances[idx])
+                'similarity': similarity,
+                'distance': dist,
+                'match_quality': '优秀' if similarity > 0.8 else '良好' if similarity > 0.5 else '一般' if similarity > 0.3 else '差'
             }
             results.append(similar_case)
+        
+        # 检查匹配质量
+        avg_similarity = np.mean([r['similarity'] for r in results])
+        if avg_similarity < 0.3:
+            print(f"⚠️  Layer2匹配质量较低（平均相似度={avg_similarity:.3f}）")
+            print(f"   可能原因：数据集中缺少风速{current_weather.get('wind_speed', 0):.1f}m/s附近的样本")
         
         return results
     

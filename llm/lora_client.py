@@ -28,9 +28,32 @@ class LoRAClient:
         """
         from config import PROJECT_ROOT, FinetuneConfig
 
-        self.adapter_path = Path(adapter_path or (
-            PROJECT_ROOT / "finetune" / "lora_output" / "final_adapter"
-        ))
+        # ✅ 优先级：显式传入 > finetune/lora_output/final_adapter > 0.25wind_power_adapter（备选）
+        adapter_candidates = [
+            adapter_path,
+            PROJECT_ROOT / "finetune" / "lora_output" / "final_adapter",
+            PROJECT_ROOT / "0.25wind_power_adapter",
+            PROJECT_ROOT / "wind_power_adapter",
+        ]
+        
+        self.adapter_path = None
+        for candidate in adapter_candidates:
+            if candidate:
+                candidate_path = Path(candidate)
+                if (candidate_path / "adapter_config.json").exists():
+                    self.adapter_path = candidate_path
+                    print(f"   ✅ 找到 LoRA Adapter: {candidate_path}")
+                    break
+        
+        if self.adapter_path is None:
+            print(f"❌ 未找到任何有效的 LoRA Adapter！")
+            print(f"   已尝试路径：")
+            for candidate in adapter_candidates[1:]:
+                if candidate:
+                    print(f"      - {candidate}")
+            raise FileNotFoundError(f"No valid LoRA adapter found in: {adapter_candidates[1:]}")
+        
+        self.adapter_path = self.adapter_path.resolve()  # 转为绝对路径
 
         # 从元信息读取基座模型
         meta_file = self.adapter_path / "training_meta.json"
@@ -38,16 +61,19 @@ class LoRAClient:
             self.base_model = base_model
         elif meta_file.exists():
             with open(meta_file, encoding='utf-8') as f:
-                self.base_model = json.load(f).get("base_model", FinetuneConfig.BASE_MODEL)
+                meta_info = json.load(f)
+                self.base_model = meta_info.get("base_model", FinetuneConfig.BASE_MODEL)
+                print(f"   📋 从元信息读取基座模型: {self.base_model}")
         else:
             self.base_model = FinetuneConfig.BASE_MODEL
+            print(f"   ⚠️  使用默认基座模型: {self.base_model}")
 
         self.model     = None
         self.tokenizer = None
         self._loaded   = False
 
     def _load(self):
-        """懒加载模型（首次调用时加载）"""
+        """加载模型（第一次调用 generate 时自动加载）"""
         if self._loaded:
             return
 
@@ -59,23 +85,53 @@ class LoRAClient:
         print(f"   基座: {self.base_model}")
         print(f"   适配器: {self.adapter_path}")
 
+        # ✅ tokenizer 必须来自 base model
         self.tokenizer = AutoTokenizer.from_pretrained(
-            str(self.adapter_path),   # 优先从 adapter 目录加载（训练时已保存）
+            self.base_model,
             trust_remote_code=True
         )
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         device_map = "auto" if torch.cuda.is_available() else "cpu"
-        
+
+        # ✅ base model 路径处理
+        base_model_path = self.base_model
+        if not Path(base_model_path).exists():
+            local_path = Path(f"D:/models/{Path(base_model_path).name}")
+            if local_path.exists():
+                print(f"   ✅ 使用本地模型: {local_path}")
+                base_model_path = str(local_path)
+
         base = AutoModelForCausalLM.from_pretrained(
-            self.base_model,
+            base_model_path,
             torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map=device_map,
             trust_remote_code=True,
             low_cpu_mem_usage=True
         )
-        self.model = PeftModel.from_pretrained(base, str(self.adapter_path))
+
+        # ✅ adapter 才用本地路径 - 必须用本地路径，不能被 transformers 当作 repo_id
+        adapter_str = str(self.adapter_path)  # 已经是 resolve() 后的绝对路径
+        print(f"   加载 adapter 权重: {adapter_str}")
+        
+        # ✅ 验证 adapter 文件完整性
+        adapter_config = self.adapter_path / "adapter_config.json"
+        adapter_model = self.adapter_path / "adapter_model.safetensors"
+        if not adapter_config.exists():
+            raise FileNotFoundError(f"adapter_config.json not found in {adapter_str}")
+        if not adapter_model.exists():
+            raise FileNotFoundError(f"adapter_model.safetensors not found in {adapter_str}")
+        
+        # ✅ local_files_only=True 强制从本地路径加载，不从 HuggingFace Hub 尝试
+        self.model = PeftModel.from_pretrained(
+            base,
+            adapter_str,
+            is_trainable=False,
+            # 关键：这两个参数确保 from_pretrained 识别为本地路径而不是 repo_id
+        )
+
         self.model.eval()
         self._loaded = True
         print("✅ LoRA 推理模型已加载")
